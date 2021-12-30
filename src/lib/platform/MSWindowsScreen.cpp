@@ -145,7 +145,9 @@ MSWindowsScreen::MSWindowsScreen(
                             new TMethodJob<MSWindowsScreen>(
                                 this, &MSWindowsScreen::updateKeysCB),
                             stopOnDeskSwitch);
-        m_keyState    = new MSWindowsKeyState(m_desks, getEventTarget(), m_events);
+        m_keyState    = new MSWindowsKeyState(m_desks, getEventTarget(), m_events,
+                                              AppUtil::instance().getKeyboardLayoutList(),
+                                              ClientApp::instance().args().m_enableLangSync);
 
         updateScreenShape();
         m_class       = createWindowClass();
@@ -331,9 +333,7 @@ MSWindowsScreen::leave()
     }
     // get keyboard layout of foreground window.  we'll use this
     // keyboard layout for translating keys sent to clients.
-    HWND window  = GetForegroundWindow();
-    DWORD thread = GetWindowThreadProcessId(window, NULL);
-    m_keyLayout  = GetKeyboardLayout(thread);
+    m_keyLayout = AppUtilWindows::instance().getCurrentKeyboardLayout();
 
     // tell the key mapper about the keyboard layout
     m_keyState->setKeyLayout(m_keyLayout);
@@ -844,17 +844,17 @@ MSWindowsScreen::updateKeys()
 
 void
 MSWindowsScreen::fakeKeyDown(KeyID id, KeyModifierMask mask,
-                KeyButton button)
+                KeyButton button, const String& lang)
 {
-    PlatformScreen::fakeKeyDown(id, mask, button);
+    PlatformScreen::fakeKeyDown(id, mask, button, lang);
     updateForceShowCursor();
 }
 
 bool
 MSWindowsScreen::fakeKeyRepeat(KeyID id, KeyModifierMask mask,
-                SInt32 count, KeyButton button)
+                SInt32 count, KeyButton button, const String& lang)
 {
-    bool result = PlatformScreen::fakeKeyRepeat(id, mask, count, button);
+    bool result = PlatformScreen::fakeKeyRepeat(id, mask, count, button, lang);
     updateForceShowCursor();
     return result;
 }
@@ -1192,7 +1192,7 @@ MSWindowsScreen::onKey(WPARAM wParam, LPARAM lParam)
     static const KeyModifierMask s_ctrlAlt =
         KeyModifierControl | KeyModifierAlt;
 
-    LOG((CLOG_DEBUG1 "event: Key char=%d, vk=0x%02x, nagr=%d, lParam=0x%08x", (wParam & 0xff00u) >> 8, wParam & 0xffu, (wParam & 0x10000u) ? 1 : 0, lParam));
+    LOG((CLOG_DEBUG1 "event: Key char=%d, vk=0x%02x, nagr=%d, lParam=0x%08x", (wParam & 0xffffu), (wParam >> 16) & 0xffu, (wParam & 0x1000000u) ? 1 : 0, lParam));
 
     // get event info
     KeyButton button         = (KeyButton)((lParam & 0x01ff0000) >> 16);
@@ -1210,7 +1210,7 @@ MSWindowsScreen::onKey(WPARAM wParam, LPARAM lParam)
     // that maps mouse buttons to keys is known to do this.
     // alternatively, we could just throw these events out.
     if (button == 0) {
-        button = m_keyState->virtualKeyToButton(wParam & 0xffu);
+        button = m_keyState->virtualKeyToButton((wParam >> 16) & 0xffu);
         if (button == 0) {
             return true;
         }
@@ -1276,7 +1276,7 @@ MSWindowsScreen::onKey(WPARAM wParam, LPARAM lParam)
     if (!ignore()) {
         // check for ctrl+alt+del.  we do not want to pass that to the
         // client.  the user can use ctrl+alt+pause to emulate it.
-        UINT virtKey = (wParam & 0xffu);
+        UINT virtKey = ((wParam >> 16) & 0xffu);
         if (virtKey == VK_DELETE && (state & s_ctrlAlt) == s_ctrlAlt) {
             LOG((CLOG_DEBUG "discard ctrl+alt+del"));
             return true;
@@ -1290,9 +1290,9 @@ MSWindowsScreen::onKey(WPARAM wParam, LPARAM lParam)
             // pressed or released.  when mapping the key we require that
             // we not use AltGr (the 0x10000 flag in wParam) and we not
             // use the keypad delete key (the 0x01000000 flag in lParam).
-            wParam  = VK_DELETE | 0x00010000u;
+            wParam  = (VK_DELETE << 16) | 0x01000000u;
             lParam &= 0xfe000000;
-            lParam |= m_keyState->virtualKeyToButton(wParam & 0xffu) << 16;
+            lParam |= m_keyState->virtualKeyToButton(VK_DELETE) << 16;
             lParam |= 0x01000001;
         }
 
@@ -1320,7 +1320,7 @@ MSWindowsScreen::onHotKey(WPARAM wParam, LPARAM lParam)
 {
     // get the key info
     KeyModifierMask state = getActiveModifiers();
-    UINT virtKey   = (wParam & 0xffu);
+    UINT virtKey   = ((wParam >> 16) & 0xffu);
     UINT modifiers = 0;
     if ((state & KeyModifierShift) != 0) {
         modifiers |= MOD_SHIFT;
@@ -1963,7 +1963,7 @@ MSWindowsScreen::getDraggingFilename()
             SWP_SHOWWINDOW);
 
         // TODO: fake these keys properly
-        fakeKeyDown(kKeyEscape, 8192, 1);
+        fakeKeyDown(kKeyEscape, 8192, 1, AppUtil::instance().getCurrentLanguageCode());
         fakeKeyUp(1);
         fakeMouseButton(kButtonLeft, false);
 
@@ -2015,7 +2015,7 @@ MSWindowsScreen::isModifierRepeat(KeyModifierMask oldState, KeyModifierMask stat
     bool result = false;
 
     if (oldState == state && state != 0) {
-        UINT virtKey = (wParam & 0xffu);
+        UINT virtKey = ((wParam >> 16) & 0xffu);
         if ((state & KeyModifierShift) != 0
             && (virtKey == VK_LSHIFT || virtKey == VK_RSHIFT)) {
             result = true;

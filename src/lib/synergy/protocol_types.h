@@ -29,9 +29,11 @@
 // 1.4:  adds crypto support
 // 1.5:  adds file transfer and removes home brew crypto
 // 1.6:  adds clipboard streaming
+// 1.7   adds security input notifications
+// 1.8   adds language synchronization functionality
 // NOTE: with new version, synergy minor version should increment
 static const SInt16        kProtocolMajorVersion = 1;
-static const SInt16        kProtocolMinorVersion = 7;
+static const SInt16        kProtocolMinorVersion = 8;
 
 // default contact port number
 static const UInt16        kDefaultPort = 24800;
@@ -102,7 +104,8 @@ enum EDataReceived {
 
 // say hello to client;  primary -> secondary
 // $1 = protocol major version number supported by server.  $2 =
-// protocol minor version number supported by server.
+// protocol minor version number supported by server. $3 = server
+// keyboard layout list.
 extern const char* const       kMsgHello;
 
 // respond to hello from server;  secondary -> primary
@@ -175,6 +178,9 @@ extern const char* const       kMsgCKeepAlive;
 //
 // data codes
 //
+// The same as kMsgDKeyDown but with languageCode
+// $4 = languageCode
+extern const char* const       kMsgDKeyDownLang;
 
 // key pressed:  primary -> secondary
 // $1 = KeyID, $2 = KeyModifierMask, $3 = KeyButton
@@ -187,6 +193,8 @@ extern const char* const       kMsgCKeepAlive;
 // the press.  this can happen with combining (dead) keys or if
 // the keyboard layouts are not identical and the user releases
 // a modifier key before releasing the modified key.
+// languageCode is parameter which helps client to react on unknwon
+// language letters
 extern const char* const       kMsgDKeyDown;
 
 // key pressed 1.0:  same as above but without KeyButton
@@ -194,6 +202,7 @@ extern const char* const       kMsgDKeyDown1_0;
 
 // key auto-repeat:  primary -> secondary
 // $1 = KeyID, $2 = KeyModifierMask, $3 = number of repeats, $4 = KeyButton
+// $5 =language code
 extern const char* const       kMsgDKeyRepeat;
 
 // key auto-repeat 1.0:  same as above but without KeyButton
@@ -277,6 +286,10 @@ extern const char* const       kMsgDDragInfo;
 // $1 = app. app only obtainable on MacOS since that's the only
 // platform facing secure input problems
 extern const char* const       kMsgDSecureInputNotification;
+
+// language synchronization:  primary -> secondary
+// $1 = List of server languages
+extern const char* const       kMsgDLanguageSynchronisation;
 
 //
 // query codes

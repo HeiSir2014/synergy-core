@@ -195,6 +195,7 @@ public slots:
         void retranslateMenuBar();
         void enableServer(bool enable);
         void enableClient(bool enable);
+        void closeEvent(QCloseEvent* event) override;
 
 #if defined(Q_OS_WIN)
         bool isServiceRunning(QString name);
@@ -251,6 +252,7 @@ public slots:
         ClientConnection    m_clientConnection;
 
         void                updateAutoConfigWidgets();
+        void updateWindowTitle();
         
 private slots:
     void on_m_pButtonApply_clicked();

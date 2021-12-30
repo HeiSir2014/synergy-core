@@ -29,5 +29,7 @@ public:
     virtual int run(int argc, char** argv) = 0;
     virtual void beforeAppExit() = 0;
     virtual void startNode() = 0;
+    virtual std::vector<String> getKeyboardLayoutList() = 0;
+    virtual String getCurrentLanguageCode() = 0;
     virtual void showNotification(const String& title, const String& text) const = 0;
 };

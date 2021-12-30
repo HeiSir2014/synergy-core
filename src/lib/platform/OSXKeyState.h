@@ -36,8 +36,9 @@ class OSXKeyState : public KeyState {
 public:
     typedef std::vector<KeyID> KeyIDs;
 
-    OSXKeyState(IEventQueue* events);
-    OSXKeyState(IEventQueue* events, synergy::KeyMap& keyMap);
+    OSXKeyState(IEventQueue* events, std::vector<String> layouts, bool isLangSyncEnabled);
+    OSXKeyState(IEventQueue* events, synergy::KeyMap& keyMap,
+                std::vector<String> layouts, bool isLangSyncEnabled);
     virtual ~OSXKeyState();
 
     //! @name modifiers
@@ -151,7 +152,9 @@ private:
     void                init();
 
     // Get keyboard event flags accorfing to keyboard modifiers
-    CGEventFlags getKeyboardEventFlags();
+    CGEventFlags getKeyboardEventFlags() const;
+    CGEventFlags getDeviceIndependedFlags() const;
+    CGEventFlags getDeviceDependedFlags() const;
 
     void setKeyboardModifiers(CGKeyCode virtualKey, bool keyDown);
 

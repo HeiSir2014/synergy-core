@@ -1,12 +1,24 @@
-v1.14.2-snapshot
+v1.14.2-stable
 ===========
 Bug fixes:
 - #7070 Fix radio button shifted focus on macOS
+- #7038 | #7104 | #7111 | #7112 | #7113 Fix client and server different keyboard layout errors
 - #7078 Fix clipboard re-enables automatically
 - #7077 Fix Ubuntu, CentOS and Debian build after SYNERGY-1161
 - #7080 Add trace if the system can't open file with trusted fingerprints
 - #7081 Fix autoconfig after SYNERGY-1161
 - #7082 Windows client doesn't resume connection after sleep
+- #7089 | #7094 Modifier keys don't work on Microsoft Remote Desktop
+- #7091 Fix CMakeFileList for unittests
+- #7092 Synergy is running after quit on Linux
+- #7095 Update account and upgrade links
+- #7096 The system duplicates hotkeys in setup
+- #7099 SYNERGY-854 Fix compilation with msvc 2014
+- #7100 | #7101 No configuration available on Windows
+- #7097 The title "Enterprise" disappeares after clicking on "Preferences"
+- #7108 Wrong characters on client for unicode
+- #7114 Fixed problem with reading languages on Linux system
+- #7115 Prevent notifications if language reading fails
 
 Enhancements:
 - #7068 Add Synergy restart when settings changed
@@ -15,6 +27,9 @@ Enhancements:
 
 Github Actions:
 - #1043 Adding upload to s3 feature on all OSes
+- #7098 Add Apple M1 runner
+- #7103 Fix core builds
+- #7109 Fix build version for M1 builds
 ===========
 
 v1.14.1-stable

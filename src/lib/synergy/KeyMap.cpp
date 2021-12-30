@@ -264,9 +264,10 @@ KeyMap::mapKey(Keystrokes& keys, KeyID id, SInt32 group,
                 ModifierToKeys& activeModifiers,
                 KeyModifierMask& currentState,
                 KeyModifierMask desiredMask,
-                bool isAutoRepeat) const
+                bool isAutoRepeat, const String& lang) const
 {
-    LOG((CLOG_DEBUG1 "mapKey %04x (%d) with mask %04x, start state: %04x", id, id, desiredMask, currentState));
+    LOG((CLOG_DEBUG1 "mapKey %04x (%d) with mask %04x, start state: %04x, group: %d",
+         id, id, desiredMask, currentState, group));
 
     // handle group change
     if (id == kKeyNextGroup) {
@@ -295,7 +296,7 @@ KeyMap::mapKey(Keystrokes& keys, KeyID id, SInt32 group,
     case kKeyNumLock:
     case kKeyScrollLock:
         item = mapModifierKey(keys, id, group, activeModifiers,
-                                currentState, desiredMask, isAutoRepeat);
+                                currentState, desiredMask, isAutoRepeat, lang);
         break;
 
     case kKeySetModifiers:
@@ -318,11 +319,11 @@ KeyMap::mapKey(Keystrokes& keys, KeyID id, SInt32 group,
     default:
         if (isCommand(desiredMask)) {
             item = mapCommandKey(keys, id, group, activeModifiers,
-                                currentState, desiredMask, isAutoRepeat);
+                                currentState, desiredMask, isAutoRepeat, lang);
         }
         else {
             item = mapCharacterKey(keys, id, group, activeModifiers,
-                                currentState, desiredMask, isAutoRepeat);
+                                currentState, desiredMask, isAutoRepeat, lang);
         }
         break;
     }
@@ -331,6 +332,27 @@ KeyMap::mapKey(Keystrokes& keys, KeyID id, SInt32 group,
         LOG((CLOG_DEBUG1 "mapped to %03x, new state %04x", item->m_button, currentState));
     }
     return item;
+}
+
+void KeyMap::setLanguageData(std::vector<String> layouts)
+{
+    m_keyboardLayouts = std::move(layouts);
+}
+
+SInt32 KeyMap::getLanguageGroupID(SInt32 group, const String& lang) const
+{
+    SInt32 id = group;
+
+    auto it = std::find(m_keyboardLayouts.begin(), m_keyboardLayouts.end(), lang);
+    if (it != m_keyboardLayouts.end()) {
+        id = static_cast<int>(std::distance(m_keyboardLayouts.begin(), it));
+        LOG((CLOG_DEBUG1 "Language %s has group id %d", lang.c_str(), id));
+    }
+    else {
+        LOG((CLOG_DEBUG1 "Could not found requested language"));
+    }
+
+    return id;
 }
 
 SInt32
@@ -512,7 +534,7 @@ KeyMap::mapCommandKey(Keystrokes& keys, KeyID id, SInt32 group,
                 ModifierToKeys& activeModifiers,
                 KeyModifierMask& currentState,
                 KeyModifierMask desiredMask,
-                bool isAutoRepeat) const
+                bool isAutoRepeat, const String& lang) const
 {
     static const KeyModifierMask s_overrideModifiers = 0xffffu;
 
@@ -574,7 +596,7 @@ KeyMap::mapCommandKey(Keystrokes& keys, KeyID id, SInt32 group,
     // add the key
     if (!keysForKeyItem(*keyItem, newGroup, newModifiers,
                             newState, desiredMask,
-                            s_overrideModifiers, isAutoRepeat, keys)) {
+                            s_overrideModifiers, isAutoRepeat, keys, lang)) {
         LOG((CLOG_DEBUG1 "can't map key"));
         keys.clear();
         return NULL;
@@ -588,11 +610,6 @@ KeyMap::mapCommandKey(Keystrokes& keys, KeyID id, SInt32 group,
         return NULL;
     }
 
-    // add keystrokes to restore group
-    if (newGroup != group) {
-        keys.push_back(Keystroke(group, true, true));
-    }
-
     // save new modifiers
     activeModifiers = newModifiers;
     currentState    = newState;
@@ -600,12 +617,31 @@ KeyMap::mapCommandKey(Keystrokes& keys, KeyID id, SInt32 group,
     return keyItem;
 }
 
+const KeyMap::KeyItemList*
+KeyMap::getKeyItemList(const KeyMap::KeyGroupTable& keyGroupTable, SInt32 group, KeyModifierMask desiredMask) const
+{
+    const KeyItemList* itemList = nullptr;
+
+    // find best key in any group, starting with the active group
+    for (SInt32 groupOffset = 0; groupOffset < getNumGroups(); ++groupOffset) {
+        auto effectiveGroup = getEffectiveGroup(group, groupOffset);
+        auto keyIndex = findBestKey(keyGroupTable[effectiveGroup], desiredMask);
+        if (keyIndex != -1) {
+            LOG((CLOG_DEBUG1 "found key in group %d", effectiveGroup));
+            itemList = &keyGroupTable[effectiveGroup][keyIndex];
+            break;
+        }
+    }
+
+    return itemList;
+}
+
 const KeyMap::KeyItem*
 KeyMap::mapCharacterKey(Keystrokes& keys, KeyID id, SInt32 group,
                 ModifierToKeys& activeModifiers,
                 KeyModifierMask& currentState,
                 KeyModifierMask desiredMask,
-                bool isAutoRepeat) const
+                bool isAutoRepeat, const String& lang) const
 {
     // find KeySym in table
     KeyIDMap::const_iterator i = m_keyIDMap.find(id);
@@ -613,38 +649,18 @@ KeyMap::mapCharacterKey(Keystrokes& keys, KeyID id, SInt32 group,
         // unknown key
         LOG((CLOG_DEBUG1 "key %04x is not on keyboard", id));
 
-
         return NULL;
     }
-    const KeyGroupTable& keyGroupTable = i->second;
 
-    // find best key in any group, starting with the active group
-    SInt32 keyIndex  = -1;
-    SInt32 numGroups = getNumGroups();
-    SInt32 groupOffset;
-    LOG((CLOG_DEBUG1 "find best:  %04x %04x", currentState, desiredMask));
-    for (groupOffset = 0; groupOffset < numGroups; ++groupOffset) {
-        SInt32 effectiveGroup = getEffectiveGroup(group, groupOffset);
-        keyIndex = findBestKey(keyGroupTable[effectiveGroup],
-                                currentState, desiredMask);
-        if (keyIndex != -1) {
-            LOG((CLOG_DEBUG1 "found key in group %d", effectiveGroup));
-            break;
-        }
-    }
-    if (keyIndex == -1) {
+    // get keys to press for key
+    auto itemList = getKeyItemList(i->second, getLanguageGroupID(group, lang), desiredMask);
+    if (!itemList || itemList->empty()) {
         // no mapping for this keysym
         LOG((CLOG_DEBUG1 "no mapping for key %04x", id));
         return NULL;
     }
 
-    // get keys to press for key
-    SInt32 effectiveGroup = getEffectiveGroup(group, groupOffset);
-    const KeyItemList& itemList = keyGroupTable[effectiveGroup][keyIndex];
-    if (itemList.empty()) {
-        return NULL;
-    }
-    const KeyItem& keyItem = itemList.back();
+    const KeyItem& keyItem = itemList->back();
 
     // make working copy of modifiers
     ModifierToKeys newModifiers = activeModifiers;
@@ -652,10 +668,10 @@ KeyMap::mapCharacterKey(Keystrokes& keys, KeyID id, SInt32 group,
     SInt32 newGroup             = group;
 
     // add each key
-    for (size_t j = 0; j < itemList.size(); ++j) {
-        if (!keysForKeyItem(itemList[j], newGroup, newModifiers,
+    for (size_t j = 0; j < itemList->size(); ++j) {
+        if (!keysForKeyItem(itemList->at(j), newGroup, newModifiers,
                             newState, desiredMask,
-                            0, isAutoRepeat, keys)) {
+                            0, isAutoRepeat, keys, lang)) {
             LOG((CLOG_DEBUG1 "can't map key"));
             keys.clear();
             return NULL;
@@ -670,11 +686,6 @@ KeyMap::mapCharacterKey(Keystrokes& keys, KeyID id, SInt32 group,
         return NULL;
     }
 
-    // add keystrokes to restore group
-    if (newGroup != group) {
-        keys.push_back(Keystroke(group, true, true));
-    }
-
     // save new modifiers
     activeModifiers = newModifiers;
     currentState    = newState;
@@ -682,21 +693,26 @@ KeyMap::mapCharacterKey(Keystrokes& keys, KeyID id, SInt32 group,
     return &keyItem;
 }
 
+void
+KeyMap::addGroupToKeystroke(Keystrokes& keys, SInt32& group, const String& lang) const
+{
+    group = getLanguageGroupID(group, lang);
+    keys.push_back(Keystroke(group, true, false));
+}
+
 const KeyMap::KeyItem*
 KeyMap::mapModifierKey(Keystrokes& keys, KeyID id, SInt32 group,
                 ModifierToKeys& activeModifiers,
                 KeyModifierMask& currentState,
                 KeyModifierMask desiredMask,
-                bool isAutoRepeat) const
+                bool isAutoRepeat, const String& lang) const
 {
     return mapCharacterKey(keys, id, group, activeModifiers,
-                                currentState, desiredMask, isAutoRepeat);
+                                currentState, desiredMask, isAutoRepeat, lang);
 }
 
 SInt32
-KeyMap::findBestKey(const KeyEntryList& entryList,
-                KeyModifierMask /*currentState*/,
-                KeyModifierMask desiredState) const
+KeyMap::findBestKey(const KeyEntryList& entryList, KeyModifierMask desiredState) const
 {
     // check for an item that can accommodate the desiredState exactly
     for (SInt32 i = 0; i < (SInt32)entryList.size(); ++i) {
@@ -759,17 +775,16 @@ KeyMap::keysForKeyItem(const KeyItem& keyItem, SInt32& group,
                 KeyModifierMask& currentState, KeyModifierMask desiredState,
                 KeyModifierMask overrideModifiers,
                 bool isAutoRepeat,
-                Keystrokes& keystrokes) const
+                Keystrokes& keystrokes,
+                const String& lang) const
 {
     static const KeyModifierMask s_notRequiredMask =
         KeyModifierAltGr | KeyModifierNumLock | KeyModifierScrollLock;
 
     // add keystrokes to adjust the group
-
-    if (App::instance().argsBase().m_enableLangSync &&
-            group != keyItem.m_group) {
+    if (group != keyItem.m_group) {
         group = keyItem.m_group;
-        keystrokes.push_back(Keystroke(group, true, false));
+        addGroupToKeystroke(keystrokes, group, lang);
     }
 
     EKeystroke type;
@@ -1333,7 +1348,7 @@ KeyMap::KeyItem::operator==(const KeyItem& x) const
 
 KeyMap::Keystroke::Keystroke(KeyButton button,
                 bool press, bool repeat, UInt32 data) :
-    m_type(kButton), m_data{}
+    m_type(kButton)
 {
     m_data.m_button.m_button = button;
     m_data.m_button.m_press = press;
@@ -1342,7 +1357,7 @@ KeyMap::Keystroke::Keystroke(KeyButton button,
 }
 
 KeyMap::Keystroke::Keystroke(SInt32 group, bool absolute, bool restore) :
-    m_type(kGroup), m_data{}
+    m_type(kGroup)
 {
     m_data.m_group.m_group = group;
     m_data.m_group.m_absolute = absolute;

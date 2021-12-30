@@ -19,6 +19,7 @@
 #include "client/Client.h"
 
 #include "client/ServerProxy.h"
+#include "synergy/AppUtil.h"
 #include "synergy/Screen.h"
 #include "synergy/FileChunk.h"
 #include "synergy/DropHelper.h"
@@ -46,6 +47,7 @@
 #include <fstream>
 #include <algorithm>
 #include <climits>
+#include <iterator>
 
 //
 // Client
@@ -304,16 +306,16 @@ Client::setClipboardDirty(ClipboardID, bool)
 }
 
 void
-Client::keyDown(KeyID id, KeyModifierMask mask, KeyButton button)
+Client::keyDown(KeyID id, KeyModifierMask mask, KeyButton button, const String &lang)
 {
-     m_screen->keyDown(id, mask, button);
+     m_screen->keyDown(id, mask, button, lang);
 }
 
 void
 Client::keyRepeat(KeyID id, KeyModifierMask mask,
-                SInt32 count, KeyButton button)
+                SInt32 count, KeyButton button, const String& lang)
 {
-     m_screen->keyRepeat(id, mask, count, button);
+     m_screen->keyRepeat(id, mask, count, button, lang);
 }
 
 void
@@ -717,6 +719,27 @@ Client::handleClipboardGrabbed(const Event& event, void*)
     }
 }
 
+bool
+Client::isCompatible(int major, int minor) const
+{
+    const std::map< int, std::set<int> > compatibleTable {
+        {6, {7, 8}}, //1.6 is compatible with 1.7 and 1.8
+        {7, {8}} //1.7 is compatible with 1.8
+    };
+
+    bool isCompatible = false;
+
+    if (major == kProtocolMajorVersion) {
+        auto versions = compatibleTable.find(minor);
+        if (versions != compatibleTable.end()) {
+            auto compatibleVersions = versions->second;
+            isCompatible = compatibleVersions.find(kProtocolMinorVersion) != compatibleVersions.end();
+        }
+    }
+
+    return isCompatible;
+}
+
 void
 Client::handleHello(const Event&, void*)
 {
@@ -732,8 +755,9 @@ Client::handleHello(const Event&, void*)
     LOG((CLOG_DEBUG1 "got hello version %d.%d", major, minor));
     SInt16 helloBackMajor = kProtocolMajorVersion;
     SInt16 helloBackMinor = kProtocolMinorVersion;
-    if (major == kProtocolMajorVersion && minor == 6 && kProtocolMinorVersion == 7) {
-        //because 1.6 and 1.7 is comptable - downgrading protocol for server
+
+    if (isCompatible(major, minor)) {
+        //because 1.6 is comptable with 1.7 and 1.8 - downgrading protocol for server
         LOG((CLOG_NOTE "Downgrading protocol version for server"));
         helloBackMinor = minor;
     }
@@ -747,9 +771,7 @@ Client::handleHello(const Event&, void*)
 
     // say hello back
     LOG((CLOG_DEBUG1 "say hello version %d.%d", helloBackMajor, helloBackMinor));
-    ProtocolUtil::writef(m_stream, kMsgHelloBack,
-                            helloBackMajor,
-                            helloBackMinor, & m_name);
+    ProtocolUtil::writef(m_stream, kMsgHelloBack, helloBackMajor, helloBackMinor, &m_name);
 
     // now connected but waiting to complete handshake
     setupScreen();

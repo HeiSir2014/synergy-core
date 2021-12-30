@@ -33,10 +33,13 @@
 #include "common/Version.h"
 #include "wintoastlib.h"
 
+#include <memory>
 #include <sstream>
 #include <iostream>
 #include <conio.h>
 #include <VersionHelpers.h>
+
+#include <Windows.h>
 
 AppUtilWindows::AppUtilWindows(IEventQueue* events) :
     m_events(events),
@@ -182,6 +185,57 @@ AppUtilWindows::startNode()
     app().startNode();
 }
 
+std::vector<String>
+AppUtilWindows::getKeyboardLayoutList()
+{
+    std::vector<String> layoutLangCodes;
+    {
+        auto uLayouts = GetKeyboardLayoutList(0, NULL);
+        auto lpList = (HKL*)LocalAlloc(LPTR, (uLayouts * sizeof(HKL)));
+        uLayouts = GetKeyboardLayoutList(uLayouts, lpList);
+
+        for (int i = 0; i < uLayouts; ++i){
+            String code("", 2);
+            GetLocaleInfoA(MAKELCID(((UINT)lpList[i] & 0xffffffff), SORT_DEFAULT), LOCALE_SISO639LANGNAME, &code[0], code.size());
+            layoutLangCodes.push_back(code);
+        }
+
+        if (lpList) {
+            LocalFree(lpList);
+        }
+    }
+    return layoutLangCodes;
+}
+
+String
+AppUtilWindows::getCurrentLanguageCode()
+{
+    String code("", 2);
+
+    auto hklLayout = getCurrentKeyboardLayout();
+    if (hklLayout) {
+        auto localLayoutID = MAKELCID(LOWORD(hklLayout), SORT_DEFAULT);
+        GetLocaleInfoA(localLayoutID, LOCALE_SISO639LANGNAME, &code[0], code.size());
+    }
+
+    return code;
+}
+
+HKL AppUtilWindows::getCurrentKeyboardLayout() const
+{
+    HKL layout = nullptr;
+
+    GUITHREADINFO gti = {sizeof(GUITHREADINFO)};
+    if (GetGUIThreadInfo(0, &gti) && gti.hwndActive) {
+        layout = GetKeyboardLayout(GetWindowThreadProcessId(gti.hwndActive, NULL));
+    }
+    else {
+        LOG((CLOG_WARN "Failed to determine current keyboard layout"));
+    }
+
+    return layout;
+}
+
 class WinToastHandler : public WinToastLib::IWinToastHandler {
 public:
     WinToastHandler() {}
@@ -195,7 +249,7 @@ public:
 void
 AppUtilWindows::showNotification(const String & title, const String & text) const
 {
-    LOG((CLOG_DEBUG "Showing notification. Title: \"%s\". Text: \"%s\"", title.c_str(), text.c_str()));
+    LOG((CLOG_INFO "Showing notification. Title: \"%s\". Text: \"%s\"", title.c_str(), text.c_str()));
     if (!WinToastLib::WinToast::isCompatible()) {
         LOG((CLOG_INFO "This system does not support toast notifications"));
         return;
@@ -225,3 +279,4 @@ AppUtilWindows::showNotification(const String & title, const String & text) cons
         return;
     }
 }
+

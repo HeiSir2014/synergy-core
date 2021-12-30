@@ -14,8 +14,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-file(GLOB headers "*.h")
-file(GLOB sources "*.cpp")
+file(GLOB headers "*.h" "languages/*.h")
+file(GLOB sources "*.cpp" "languages/*.cpp")
 
 # arch
 if (WIN32)
@@ -27,6 +27,9 @@ elseif (UNIX)
     file(GLOB arch_headers "unix/*.h")
     file(GLOB arch_sources "unix/*.cpp")
 endif()
+
+include_directories("../../../ext/pugixml/src")
+list(APPEND arch_sources "../../../ext/pugixml/src/pugixml.cpp")
 
 list(APPEND sources ${arch_sources})
 list(APPEND headers ${arch_headers})
