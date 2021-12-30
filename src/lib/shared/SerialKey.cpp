@@ -34,7 +34,7 @@ SerialKey::SerialKey(Edition edition):
     m_userLimit(1),
     m_warnTime(ULLONG_MAX),
     m_expireTime(ULLONG_MAX),
-    m_edition(edition)
+    m_edition(kPro)
 {
 }
 
@@ -42,7 +42,7 @@ SerialKey::SerialKey(std::string serial) :
     m_userLimit(1),
     m_warnTime(0),
     m_expireTime(0),
-    m_edition(kBasic)
+    m_edition(kPro)
 {
     string plainText = decode(serial);
     bool valid = false;
@@ -57,6 +57,7 @@ SerialKey::SerialKey(std::string serial) :
 bool
 SerialKey::isExpiring(time_t currentTime) const
 {
+    return true;
     bool result = false;
 
     if (isTemporary()) {
@@ -72,6 +73,7 @@ SerialKey::isExpiring(time_t currentTime) const
 bool
 SerialKey::isExpired(time_t currentTime) const
 {
+    return false;
     bool result = false;
 
     if (isTemporary()) {
@@ -87,18 +89,21 @@ SerialKey::isExpired(time_t currentTime) const
 bool
 SerialKey::isTrial() const
 {
+    return false;
     return m_KeyType.isTrial();
 }
 
 bool
 SerialKey::isTemporary() const
 {
+    return false;
     return m_KeyType.isTemporary();
 }
 
 bool
 SerialKey::isValid() const
 {
+    return true;
     bool Valid = true;
 
     if (m_edition.getType() == kUnregistered || isExpired(::time(0)))
@@ -112,6 +117,7 @@ SerialKey::isValid() const
 Edition
 SerialKey::edition() const
 {
+    return kPro;
     return m_edition.getType();
 }
 
@@ -157,6 +163,7 @@ SerialKey::toString() const
 time_t
 SerialKey::daysLeft(time_t currentTime) const
 {
+    return INT_MAX;
     unsigned long long timeLeft =  0;
     unsigned long long const day = 60 * 60 * 24;
 
@@ -174,6 +181,7 @@ SerialKey::daysLeft(time_t currentTime) const
 int
 SerialKey::getSpanLeft(time_t time) const
 {
+    return INT_MAX;
     int result{-1};
 
     if (isTemporary() && !isExpired(time)){
